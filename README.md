@@ -100,7 +100,7 @@ supabase start
 ```
 
 This will output your local Supabase credentials, including:
-- API URL (typically `http://127.0.0.1:54321`)
+- API URL (typically `http://127.0.0.1:54323`)
 - `anon` key (use this for `VITE_SUPABASE_ANON_KEY` and `SUPABASE_ANON_KEY`)
 - Service role key
 
