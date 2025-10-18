@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/lib/database.types'
 
@@ -11,21 +11,40 @@ export function useWords() {
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE)
 
+  // Debounced search effect
   useEffect(() => {
-    fetchWords()
+    const timeoutId = setTimeout(() => {
+      fetchWords()
+    }, 500)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchQuery])
+
+  // Separate effect for page changes (immediate)
+  useEffect(() => {
+    if (!searchQuery) {
+      fetchWords()
+    }
   }, [currentPage])
 
   const fetchWords = async () => {
     try {
       setLoading(true)
 
+      // Build query with search
+      let query = supabase.from('words').select('*', { count: 'exact' })
+
+      if (searchQuery.trim()) {
+        // Search in both original word and translation
+        query = query.or(`word.ilike.%${searchQuery}%,translated_word.ilike.%${searchQuery}%`)
+      }
+
       // Get total count
-      const { count } = await supabase
-        .from('words')
-        .select('*', { count: 'exact', head: true })
+      const { count } = await query
 
       setTotalCount(count || 0)
 
@@ -33,9 +52,13 @@ export function useWords() {
       const from = (currentPage - 1) * ITEMS_PER_PAGE
       const to = from + ITEMS_PER_PAGE - 1
 
-      const { data, error } = await supabase
-        .from('words')
-        .select('*')
+      let dataQuery = supabase.from('words').select('*')
+
+      if (searchQuery.trim()) {
+        dataQuery = dataQuery.or(`word.ilike.%${searchQuery}%,translated_word.ilike.%${searchQuery}%`)
+      }
+
+      const { data, error } = await dataQuery
         .order('created_at', { ascending: false })
         .range(from, to)
 
@@ -68,15 +91,28 @@ export function useWords() {
     fetchWords()
   }
 
+  const handleSearch = (query: string) => {
+    setSearchQuery(query)
+    setCurrentPage(1) // Reset to first page when searching
+  }
+
+  const clearSearch = () => {
+    setSearchQuery('')
+    setCurrentPage(1)
+  }
+
   return {
     words,
     loading,
     currentPage,
     totalPages,
     totalCount,
+    searchQuery,
     goToNextPage,
     goToPreviousPage,
     goToPage,
     refresh,
+    handleSearch,
+    clearSearch,
   }
 }

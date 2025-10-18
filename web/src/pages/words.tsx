@@ -8,7 +8,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState } from 'react'
 
 export default function WordsPage() {
   const {
@@ -17,9 +19,14 @@ export default function WordsPage() {
     currentPage,
     totalPages,
     totalCount,
+    searchQuery,
     goToNextPage,
     goToPreviousPage,
+    handleSearch,
+    clearSearch,
   } = useWords()
+
+  const [localSearchQuery, setLocalSearchQuery] = useState('')
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -31,6 +38,16 @@ export default function WordsPage() {
     })
   }
 
+  const handleSearchChange = (value: string) => {
+    setLocalSearchQuery(value)
+    handleSearch(value)
+  }
+
+  const handleClearSearch = () => {
+    setLocalSearchQuery('')
+    clearSearch()
+  }
+
   return (
     <div className="container mx-auto py-8">
       <Card>
@@ -38,16 +55,39 @@ export default function WordsPage() {
           <CardTitle>Words</CardTitle>
           <CardDescription>
             All words from the database (showing {words.length} of {totalCount} words)
+            {searchQuery && (
+              <span className="text-blue-600"> • Searching for: "{searchQuery}"</span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Search Input */}
+          <div className="mb-6">
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                placeholder="Search by word or translation..."
+                value={localSearchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="flex-1"
+              />
+              {searchQuery && (
+                <Button type="button" variant="outline" onClick={handleClearSearch}>
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
+
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <p className="text-muted-foreground">Loading words...</p>
             </div>
           ) : words.length === 0 ? (
             <div className="flex items-center justify-center py-8">
-              <p className="text-muted-foreground">No words found</p>
+                <p className="text-muted-foreground">
+                  {searchQuery ? `No words found for "${searchQuery}"` : 'No words found'}
+                </p>
             </div>
           ) : (
             <>
@@ -57,6 +97,8 @@ export default function WordsPage() {
                     <TableRow>
                       <TableHead className="w-[100px]">ID</TableHead>
                       <TableHead>Word</TableHead>
+                          <TableHead>Language</TableHead>
+                          <TableHead>Translation</TableHead>
                       <TableHead className="text-right">Created At</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -67,6 +109,14 @@ export default function WordsPage() {
                           {word.id.slice(0, 8)}...
                         </TableCell>
                         <TableCell className="font-medium">{word.word}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {word.language_code.toUpperCase()}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {word.translated_word || '-'}
+                        </TableCell>
                         <TableCell className="text-right text-muted-foreground">
                           {formatDate(word.created_at)}
                         </TableCell>

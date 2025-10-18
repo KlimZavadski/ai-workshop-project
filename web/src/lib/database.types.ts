@@ -17,16 +17,22 @@ export interface Database {
         Row: {
           id: string
           word: string
+          language_code: string
+          translated_word: string | null
           created_at: string
         }
         Insert: {
           id?: string
           word: string
+          language_code: string
+          translated_word?: string | null
           created_at?: string
         }
         Update: {
           id?: string
           word?: string
+          language_code?: string
+          translated_word?: string | null
           created_at?: string
         }
       }
