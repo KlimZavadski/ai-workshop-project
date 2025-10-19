@@ -1,0 +1,34 @@
+word_extraction_task:
+  description: >
+    Extract words from the provided text that correspond to the specified CEFR language level: {language_level}
+
+    Text to analyze: {text}
+
+    User context: {user_context}
+
+    Your task is to carefully analyze the text and identify all words that correspond to the
+    specified language level. Consider the following criteria for each level:
+
+    A1 (Beginner): Basic everyday vocabulary, common nouns, simple verbs, basic adjectives
+    A2 (Elementary): Expanded everyday vocabulary, simple past/future tenses, common expressions
+    B1 (Intermediate): More complex vocabulary, abstract concepts, idiomatic expressions
+    B2 (Upper Intermediate): Advanced vocabulary, nuanced expressions, complex grammatical structures
+    C1 (Advanced): Sophisticated vocabulary, specialized terms, complex idiomatic expressions
+    C2 (Proficient): Highly specialized vocabulary, literary language, complex abstract concepts
+
+    You must return your response as a JSON object with the following structure:
+    {{
+      "words": ["word1", "word2", "word3"],
+      "total_words": 3,
+      "language_level": "A1",
+      "analysis": "Brief explanation of the extraction process"
+    }}
+
+    Where "words" is an array of extracted words, "total_words" is the count,
+    "language_level" is the requested level, and "analysis" is a brief explanation.
+  expected_output: >
+    A JSON object with four fields: "words" (array of strings) containing words that match
+    the specified language level, "total_words" (integer) with the count of extracted words,
+    "language_level" (string) with the requested level, and "analysis" (string) with a brief
+    explanation of the extraction process.
+  agent: word_extractor

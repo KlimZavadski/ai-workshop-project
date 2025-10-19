@@ -10,6 +10,8 @@ from supabase import create_client, Client
 
 from crews.random_phrase_crew.crew import RandomPhraseCrew
 from crews.random_phrase_crew.schemas import PhraseOutput
+from crews.word_extractor_crew.crew import WordExtractorCrew
+from crews.word_extractor_crew.schemas import WordExtractionOutput
 
 from lib.tracer import traceable
 
@@ -92,6 +94,40 @@ async def get_user_context(user_id: str) -> Optional[str]:
 
 
 @traceable
+async def extract_words_by_level(text: str, language_level: str, user_context: str) -> WordExtractionOutput:
+    """
+    Extract words from text that correspond to the specified language level.
+
+    Args:
+        text: Text to analyze
+        language_level: CEFR language level (A1-C2)
+        user_context: User context for personalization
+
+    Returns:
+        WordExtractionOutput with extracted words and analysis
+    """
+    inputs = {
+        'text': text,
+        'language_level': language_level,
+        'user_context': user_context
+    }
+
+    result = await WordExtractorCrew().crew().kickoff_async(inputs=inputs)
+
+    # CrewAI returns a result with a .pydantic attribute containing the Pydantic model
+    if hasattr(result, 'pydantic'):
+        return result.pydantic
+
+    # Fallback - return a basic WordExtractionOutput
+    return WordExtractionOutput(
+        words=[],
+        total_words=0,
+        language_level=language_level,
+        analysis="Error processing text"
+    )
+
+
+@traceable
 async def generate_random_phrase(words: list[str], user_context: str) -> PhraseOutput:
     """
     Generate a random phrase using the RandomPhraseCrew.
@@ -162,6 +198,61 @@ async def get_random_phrase():
 
         # Generate the phrase
         result = await generate_random_phrase(words, user_context or "")
+
+        return jsonify(result.model_dump()), 200
+
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
+
+@app.route("/api/extract-words", methods=["POST"])
+@require_auth
+async def extract_words():
+    """
+    Extract words from text that correspond to the specified language level.
+
+    Request body:
+        {
+            "text": "text to analyze",
+            "language_level": "A1" // A1, A2, B1, B2, C1, C2
+        }
+
+    Headers:
+        Authorization: Bearer <jwt_token>
+
+    Response:
+        {
+            "words": ["word1", "word2"],
+            "total_words": 2,
+            "language_level": "A1",
+            "analysis": "Brief explanation"
+        }
+    """
+    try:
+        # Get data from request body
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "Request body is required"}), 400
+
+        text = data.get("text", "").strip()
+        language_level = data.get("language_level", "").strip()
+
+        if not text:
+            return jsonify({"error": "'text' field is required and cannot be empty"}), 400
+
+        if not language_level:
+            return jsonify({"error": "'language_level' field is required"}), 400
+
+        if language_level not in ["A1", "A2", "B1", "B2", "C1", "C2"]:
+            return jsonify({"error": "language_level must be one of: A1, A2, B1, B2, C1, C2"}), 400
+
+        # Get user context from Supabase
+        user_id = request.user.id
+        user_context = await get_user_context(user_id)
+
+        # Extract words by level
+        result = await extract_words_by_level(text, language_level, user_context or "")
 
         return jsonify(result.model_dump()), 200
 

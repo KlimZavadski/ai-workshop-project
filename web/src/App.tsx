@@ -7,6 +7,7 @@ import LoginPage from './pages/login'
 import SignUpPage from './pages/signup'
 import WordsPage from './pages/words'
 import RandomPhrasePage from './pages/random-phrase'
+import PhrasesPage from './pages/phrases'
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/words" element={<WordsPage />} />
             <Route path="/random-phrase" element={<RandomPhrasePage />} />
+            <Route path="/phrases" element={<PhrasesPage />} />
           </Route>
 
           {/* Default redirect */}
