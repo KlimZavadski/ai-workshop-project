@@ -5,17 +5,66 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useWordExtraction } from '@/hooks/use-word-extraction'
+import { useWordSelection, type WordSelection } from '@/hooks/use-word-selection'
+import { getWordCount } from '@/lib/validation'
 
 export default function PhrasesPage() {
   const [text, setText] = useState('')
   const [languageLevel, setLanguageLevel] = useState<string>('')
-  const { result, loading, error, extractWords } = useWordExtraction()
+  const [wordSelections, setWordSelections] = useState<WordSelection[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<Error | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  const { result, loading, error, validation, extractWords, validateText } = useWordExtraction()
+  const { createWordSelections, addSelectedWords } = useWordSelection()
+
+  const handleTextChange = (newText: string) => {
+    setText(newText)
+    validateText(newText)
+  }
 
   const handleSubmit = async () => {
     if (!text.trim() || !languageLevel) return
-    await extractWords(text, languageLevel)
+    const extractionResult = await extractWords(text, languageLevel)
+    if (extractionResult) {
+      const selections = createWordSelections(extractionResult.words)
+      setWordSelections(selections)
+    }
   }
+
+  const handleWordSelectionChange = (index: number, selected: boolean) => {
+    setWordSelections(prev =>
+      prev.map((selection, i) =>
+        i === index ? { ...selection, selected } : selection
+      )
+    )
+  }
+
+  const handleSaveSelectedWords = async () => {
+    setSaving(true)
+    setSaveError(null)
+    setSaveSuccess(false)
+
+    try {
+      await addSelectedWords(wordSelections)
+      setSaveSuccess(true)
+      // Сбрасываем выбор после сохранения
+      setWordSelections(prev =>
+        prev.map(selection => ({ ...selection, selected: false }))
+      )
+    } catch (err) {
+      setSaveError(err instanceof Error ? err : new Error('Failed to save words'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const wordCount = getWordCount(text)
+  const selectedWordsCount = wordSelections.filter(s => s.selected).length
+  const canSave = selectedWordsCount > 0 && !saving
 
   return (
     <div className="container mx-auto py-8">
@@ -24,21 +73,47 @@ export default function PhrasesPage() {
           <CardHeader>
             <CardTitle>Phrases</CardTitle>
             <CardDescription>
-              Enter text and select language level to process phrases
+              Введите текст на польском языке (до 100 слов) и выберите уровень языка для извлечения слов
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Text Input */}
             <div className="space-y-2">
-              <Label htmlFor="text-input">Text</Label>
+              <Label htmlFor="text-input">Polish Text</Label>
               <textarea
                 id="text-input"
-                placeholder="Enter your text here..."
+                placeholder="Wprowadź tekst w języku polskim..."
                 value={text}
-                onChange={(e) => setText(e.target.value)}
-                className="w-full min-h-[120px] px-3 py-2 border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 rounded-md resize-none"
+                onChange={(e) => handleTextChange(e.target.value)}
+                className={`w-full min-h-[120px] px-3 py-2 border text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 rounded-md resize-none ${validation.isValid
+                  ? 'border-input bg-background focus-visible:ring-ring'
+                  : 'border-destructive bg-background focus-visible:ring-destructive'
+                  }`}
                 rows={5}
               />
+
+              {/* Word Count */}
+              <div className="flex justify-between items-center text-xs">
+                <div className={`${wordCount.isValid ? 'text-muted-foreground' : 'text-destructive'}`}>
+                  {wordCount.current}/{wordCount.max} слов
+                </div>
+                {text.trim().length > 0 && (
+                  <div className={`${wordCount.isValid ? 'text-green-600' : 'text-destructive'}`}>
+                    {wordCount.isValid ? '✓' : '✗'}
+                  </div>
+                )}
+              </div>
+
+              {/* Validation Errors */}
+              {!validation.isValid && validation.errors.length > 0 && (
+                <div className="space-y-1">
+                  {validation.errors.map((error, index) => (
+                    <p key={index} className="text-sm text-destructive">
+                      {error}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Language Level Selection */}
@@ -64,7 +139,7 @@ export default function PhrasesPage() {
               <Button
                 size="lg"
                 onClick={handleSubmit}
-                disabled={!text.trim() || !languageLevel || loading}
+                disabled={!text.trim() || !languageLevel || loading || !validation.isValid}
               >
                 {loading ? 'Processing...' : 'Extract Words'}
               </Button>
@@ -106,25 +181,99 @@ export default function PhrasesPage() {
 
                   {/* Extracted Words */}
                   <div>
-                    <h3 className="text-sm font-medium mb-3">
-                      Extracted Words ({result.total_words}):
-                    </h3>
-                    <div className="flex gap-2 flex-wrap">
-                      {result.words.length > 0 ? (
-                        result.words.map((word, index) => (
-                          <Badge key={index} variant="secondary" className="text-base px-3 py-1">
-                            {word}
-                          </Badge>
-                        ))
-                      ) : (
-                        <p className="text-muted-foreground text-sm">
-                          No words found for this level
-                        </p>
-                      )}
-                    </div>
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="text-sm font-medium">
+                            Извлеченные слова ({result.total_words}):
+                          </h3>
+                          {selectedWordsCount > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              Выбрано: {selectedWordsCount}
+                            </span>
+                          )}
+                        </div>
+
+                        {result.words.length > 0 ? (
+                          <div className="space-y-2">
+                            {wordSelections.map((selection, index) => (
+                              <div key={index} className="flex items-center space-x-3 p-2 rounded-md border">
+                                <Checkbox
+                                  id={`word-${index}`}
+                                  checked={selection.selected}
+                                  onCheckedChange={(checked) =>
+                                    handleWordSelectionChange(index, checked as boolean)
+                                  }
+                                  disabled={selection.existsInDb}
+                                />
+                                <Label
+                                  htmlFor={`word-${index}`}
+                                  className={`flex-1 cursor-pointer ${selection.existsInDb ? 'text-muted-foreground' : ''
+                                    }`}
+                                >
+                                  {selection.word}
+                                </Label>
+                                {selection.existsInDb && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Уже в базе
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-muted-foreground text-sm">
+                            Слова для этого уровня не найдены
+                          </p>
+                        )}
                   </div>
                 </>
               ) : null}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Save Selected Words Section */}
+        {wordSelections.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Сохранение слов</CardTitle>
+              <CardDescription>
+                Выберите слова для добавления в базу данных
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Success/Error Messages */}
+              {saveSuccess && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                  <p className="text-sm text-green-800">
+                    ✓ Слова успешно добавлены в базу данных!
+                  </p>
+                </div>
+              )}
+
+              {saveError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                  <p className="text-sm text-red-800">
+                    ✗ Ошибка при сохранении: {saveError.message}
+                  </p>
+                </div>
+              )}
+
+              {/* Save Button */}
+              <div className="flex justify-center">
+                <Button
+                  onClick={handleSaveSelectedWords}
+                  disabled={!canSave}
+                  size="lg"
+                  className="min-w-[200px]"
+                >
+                  {saving ? 'Сохранение...' : `Сохранить выбранные слова (${selectedWordsCount})`}
+                </Button>
+              </div>
+
+              {/* Info about existing words */}
+              <div className="text-xs text-muted-foreground text-center">
+                Слова, которые уже есть в базе данных, нельзя выбрать для добавления
+              </div>
             </CardContent>
           </Card>
         )}
@@ -134,12 +283,22 @@ export default function PhrasesPage() {
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground space-y-2">
               <p>
-                Enter your text and select the appropriate language level to extract
-                words that correspond to that CEFR level using AI.
+                Введите текст на польском языке (до 100 слов) и выберите
+                соответствующий уровень языка для извлечения слов с помощью ИИ.
               </p>
               <p>
-                The system will analyze your text and identify words that match the
-                vocabulary complexity of the selected language level.
+                Система проанализирует ваш текст и определит слова, соответствующие
+                сложности словаря выбранного уровня языка CEFR.
+              </p>
+              <p>
+                <strong>Новая функциональность:</strong> После извлечения слов вы можете
+                выбрать те, которые хотите добавить в базу данных. Слова, которые уже
+                существуют в базе, будут отмечены и недоступны для выбора.
+              </p>
+              <p className="text-xs">
+                <strong>Требования:</strong> Текст должен быть на польском языке, содержать
+                от 1 до 100 слов, включать польские символы (ąćęłńóśźż) или
+                распространенные польские слова.
               </p>
             </div>
           </CardContent>
